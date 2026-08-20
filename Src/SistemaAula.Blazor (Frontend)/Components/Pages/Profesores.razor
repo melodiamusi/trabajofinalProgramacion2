@@ -1,0 +1,181 @@
+﻿@page "/profesores"
+@rendermode InteractiveServer
+
+@using SistemaAula.Blazor.Models
+@using SistemaAula.Blazor.Services
+@inject ProfesorApiService ProfesorService
+
+<h3 class="mb-4">Gestión de Profesores</h3>
+
+<div class="card p-3 mb-4 shadow-sm">
+    <h5>@(modoEdicion ? $"Editar Profesor (ID: {profesorActual.Id})" : "Registrar Nuevo Profesor")</h5>
+    <div class="row g-2">
+        <div class="col-md-4">
+            <label class="form-label">Nombre Completo</label>
+            <input class="form-control" placeholder="Ej. Dr. Roberto Gómez" @bind="profesorActual.Nombre" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Correo Electrónico</label>
+            <input type="email" class="form-control" placeholder="Ej. rgomez@itla.edu.do" @bind="profesorActual.Correo" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Especialidad</label>
+            <input class="form-control" placeholder="Ej. Base de Datos / Redes" @bind="profesorActual.Especialidad" />
+        </div>
+        <div class="col-12 mt-3 text-end">
+            @if (modoEdicion)
+            {
+                <button type="button" class="btn btn-secondary me-2" @onclick="CancelarEdicion" disabled="@estaProcesando">Cancelar</button>
+                <button type="button" class="btn btn-success" @onclick="Guardar" disabled="@estaProcesando">
+                    @(estaProcesando ? "Guardando..." : "Actualizar Profesor")
+                </button>
+            }
+            else
+            {
+                <button type="button" class="btn btn-primary" @onclick="Guardar" disabled="@estaProcesando">
+                    @(estaProcesando ? "Guardando..." : "Guardar Profesor")
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(mensajeAlerta))
+    {
+        <div class="alert @(esExito ? "alert-success" : "alert-danger") mt-3 mb-0">@mensajeAlerta</div>
+    }
+</div>
+
+<h5>Profesores Registrados</h5>
+@if (lista == null)
+{
+    <p><em>Cargando profesores...</em></p>
+}
+else if (lista.Count == 0)
+{
+    <div class="alert alert-warning">No hay profesores registrados.</div>
+}
+else
+{
+    <table class="table table-bordered table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Correo</th>
+                <th>Especialidad</th>
+                <th style="width: 180px;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var prof in lista)
+            {
+                <tr>
+                    <td>@prof.Id</td>
+                    <td>@prof.Nombre</td>
+                    <td>@prof.Correo</td>
+                    <td>@prof.Especialidad</td>
+                    <td>
+                        <button type="button" class="btn btn-warning btn-sm me-1" @onclick="() => SeleccionarParaEditar(prof)" disabled="@estaProcesando">Editar</button>
+                        <button type="button" class="btn btn-danger btn-sm" @onclick="() => Eliminar(prof.Id)" disabled="@estaProcesando">Eliminar</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<ProfesorModel>? lista;
+    private ProfesorModel profesorActual = new();
+    private bool modoEdicion = false;
+    private bool estaProcesando = false;
+    private bool esExito = false;
+    private string mensajeAlerta = string.Empty;
+
+    protected override async Task OnInitializedAsync() => await Cargar();
+
+    private async Task Cargar()
+    {
+        lista = await ProfesorService.ObtenerProfesores();
+    }
+
+    private void SeleccionarParaEditar(ProfesorModel p)
+    {
+        profesorActual = new ProfesorModel
+        {
+            Id = p.Id,
+            Nombre = p.Nombre,
+            Correo = p.Correo,
+            Especialidad = p.Especialidad
+        };
+        modoEdicion = true;
+        mensajeAlerta = string.Empty;
+    }
+
+    private void CancelarEdicion()
+    {
+        profesorActual = new ProfesorModel();
+        modoEdicion = false;
+        mensajeAlerta = string.Empty;
+    }
+
+    private async Task Guardar()
+    {
+        mensajeAlerta = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(profesorActual.Nombre))
+        {
+            mensajeAlerta = "El nombre del profesor es obligatorio.";
+            esExito = false;
+            return;
+        }
+
+        estaProcesando = true;
+
+        try
+        {
+            var resultado = modoEdicion
+                ? await ProfesorService.ActualizarProfesorAsync(profesorActual)
+                : await ProfesorService.CrearProfesorAsync(profesorActual);
+
+            if (resultado.Exito)
+            {
+                mensajeAlerta = resultado.Mensaje;
+                esExito = true;
+                CancelarEdicion();
+                await Cargar();
+            }
+            else
+            {
+                mensajeAlerta = resultado.Mensaje;
+                esExito = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            mensajeAlerta = $"Error de comunicación: {ex.Message}";
+            esExito = false;
+        }
+        finally
+        {
+            estaProcesando = false;
+        }
+    }
+
+    private async Task Eliminar(int id)
+    {
+        estaProcesando = true;
+        try
+        {
+            if (await ProfesorService.EliminarProfesorAsync(id))
+            {
+                if (modoEdicion && profesorActual.Id == id) CancelarEdicion();
+                await Cargar();
+            }
+        }
+        finally
+        {
+            estaProcesando = false;
+        }
+    }
+}

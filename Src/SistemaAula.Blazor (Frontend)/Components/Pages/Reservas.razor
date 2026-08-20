@@ -1,0 +1,304 @@
+﻿@page "/reservas"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+@using SistemaAula.Blazor.Models
+@using SistemaAula.Blazor.Services
+
+@inject ReservaApiService ReservaService
+@inject AulaApiService AulaService
+@inject HorarioApiService HorarioService
+@inject ProfesorApiService ProfesorService
+
+<PageTitle>Solicitudes y Reservas - SediAula PRO</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-0">📅 Solicitudes y Asignación de Aulas</h3>
+        <small class="text-muted">Control de disponibilidad de espacios físicos y gestión de estados</small>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(mensajeAlerta))
+{
+    <div class="alert @(esError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+        <strong>@(esError ? "⚠️ Error: " : "✅ Éxito: ")</strong>
+        @mensajeAlerta
+        <button type="button" class="btn-close" @onclick="CerrarAlerta"></button>
+    </div>
+}
+
+<div class="row g-4">
+    <!-- FORMULARIO -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 p-4">
+            <h5 class="fw-bold text-primary mb-3">Nueva Solicitud de Aula</h5>
+
+            <EditForm Model="nuevaReserva" OnSubmit="SolicitarReserva">
+                <!-- PROFESOR -->
+                <div class="mb-3">
+                    <label class="form-label">Profesor Solicitante</label>
+                    <select class="form-select" @bind="nuevaReserva.ProfesorId">
+                        <option value="0">-- Selecciona un Profesor --</option>
+                        @foreach (var prof in profesores)
+                        {
+                            <option value="@prof.Id">@prof.Nombre (@prof.Especialidad)</option>
+                        }
+                    </select>
+                </div>
+
+                <!-- AULA -->
+                <div class="mb-3">
+                    <label class="form-label">Aula / Espacio</label>
+                    <select class="form-select" @bind="nuevaReserva.AulaId">
+                        <option value="0">-- Selecciona un Aula --</option>
+                        @foreach (var aula in aulas)
+                        {
+                            <option value="@aula.Id">@aula.Nombre (Cap: @aula.Capacidad)</option>
+                        }
+                    </select>
+                </div>
+
+                <!-- HORARIO -->
+                <div class="mb-3">
+                    <label class="form-label">Bloque de Horario</label>
+                    <select class="form-select" @bind="nuevaReserva.HorarioId">
+                        <option value="0">-- Selecciona un Horario --</option>
+                        @foreach (var horario in horarios)
+                        {
+                            <option value="@horario.Id">
+                                @horario.DiaSemana (@horario.HoraInicio.ToString(@"hh\:mm") - @horario.HoraFin.ToString(@"hh\:mm"))
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <!-- FECHA -->
+                <div class="mb-3">
+                    <label class="form-label">Fecha Requerida</label>
+                    <InputDate class="form-control" @bind-Value="nuevaReserva.FechaReserva" />
+                </div>
+
+                <!-- MOTIVO -->
+                <div class="mb-3">
+                    <label class="form-label">Motivo / Actividad</label>
+                    <InputText class="form-control" @bind-Value="nuevaReserva.Motivo" placeholder="Ej. Examen Final, Conferencia" />
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100" disabled="@procesando">
+                    @(procesando ? "Procesando..." : "Validar y Reservar")
+                </button>
+            </EditForm>
+        </div>
+    </div>
+
+    <!-- TABLA -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4 p-4">
+            <h5 class="fw-bold mb-3">Historial y Control de Estados</h5>
+
+            @if (cargando)
+            {
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary"></div>
+                </div>
+            }
+            else if (reservas.Count == 0)
+            {
+                <div class="alert alert-light border text-center">No hay solicitudes ni reservas activas.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Aula</th>
+                                <th>Fecha</th>
+                                <th>Horario</th>
+                                <th>Motivo</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var reserva in reservas)
+                            {
+                                <tr>
+                                    <td>@reserva.AulaNombre</td>
+                                    <td>@reserva.FechaReserva.ToString("dd/MM/yyyy")</td>
+                                    <td>@reserva.HorarioDetalle</td>
+                                    <td>@reserva.Motivo</td>
+                                    <td>
+                                        @if (reserva.Estado == "Aprobada")
+                                        {
+                                            <span class="badge bg-success">Aprobada</span>
+                                        }
+                                        else if (reserva.Estado == "Rechazada")
+                                        {
+                                            <span class="badge bg-danger">Rechazada</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark">Pendiente</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (reserva.Estado == "Pendiente")
+                                        {
+                                            <button type="button" class="btn btn-sm btn-success me-1" @onclick="() => AprobarSeleccionada(reserva.Id)">✓</button>
+                                            <button type="button" class="btn btn-sm btn-danger me-1" @onclick="() => RechazarSeleccionada(reserva.Id)">✕</button>
+                                        }
+                                        <button type="button" class="btn btn-sm btn-secondary" @onclick="() => EliminarSeleccionada(reserva.Id)">🗑️</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<ReservaModel> reservas = new();
+    private List<AulaModel> aulas = new();
+    private List<HorarioModel> horarios = new();
+    private List<ProfesorModel> profesores = new();
+
+    private ReservaModel nuevaReserva = new()
+    {
+        FechaReserva = DateTime.Today
+    };
+
+    private string mensajeAlerta = string.Empty;
+    private bool esError = false;
+    private bool cargando = true;
+    private bool procesando = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private void CerrarAlerta()
+    {
+        mensajeAlerta = string.Empty;
+        esError = false;
+    }
+
+    private async Task CargarDatos()
+    {
+        cargando = true;
+        try
+        {
+            aulas = await AulaService.ObtenerAulasAsync();
+            horarios = await HorarioService.ObtenerHorariosAsync();
+            profesores = await ProfesorService.ObtenerProfesores();
+            reservas = await ReservaService.ObtenerReservasAsync();
+        }
+        catch (Exception ex)
+        {
+            mensajeAlerta = $"Error al cargar datos: {ex.Message}";
+            esError = true;
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task SolicitarReserva(EditContext context)
+    {
+        if (nuevaReserva.ProfesorId == 0 || nuevaReserva.AulaId == 0 || nuevaReserva.HorarioId == 0)
+        {
+            mensajeAlerta = "Debes seleccionar Profesor, Aula y Horario obligatoriamente.";
+            esError = true;
+            return;
+        }
+
+        procesando = true;
+        try
+        {
+            var resultado = await ReservaService.CrearReservaAsync(nuevaReserva);
+
+            if (resultado.Exito)
+            {
+                mensajeAlerta = resultado.Mensaje?.Replace("\"", "") ?? "Reserva creada correctamente.";
+                esError = false;
+
+                nuevaReserva = new ReservaModel
+                {
+                    FechaReserva = DateTime.Today
+                };
+
+                await CargarDatos();
+            }
+            else
+            {
+                mensajeAlerta = resultado.Mensaje?.Replace("\"", "") ?? "No se pudo crear la reserva.";
+                esError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            mensajeAlerta = $"Error de conexión: {ex.Message}";
+            esError = true;
+        }
+        finally
+        {
+            procesando = false;
+        }
+    }
+
+    private async Task AprobarSeleccionada(int id) => await CambiarEstado(id, "Aprobada");
+    private async Task RechazarSeleccionada(int id) => await CambiarEstado(id, "Rechazada");
+
+    private async Task CambiarEstado(int id, string estado)
+    {
+        try
+        {
+            var resultado = await ReservaService.CambiarEstadoAsync(id, estado);
+            if (resultado)
+            {
+                mensajeAlerta = $"Reserva {estado.ToLower()} correctamente.";
+                esError = false;
+                await CargarDatos();
+            }
+            else
+            {
+                mensajeAlerta = "No se pudo cambiar el estado.";
+                esError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            mensajeAlerta = $"Error: {ex.Message}";
+            esError = true;
+        }
+    }
+
+    private async Task EliminarSeleccionada(int id)
+    {
+        try
+        {
+            var resultado = await ReservaService.EliminarReservaAsync(id);
+            if (resultado)
+            {
+                mensajeAlerta = "Reserva eliminada correctamente.";
+                esError = false;
+                await CargarDatos();
+            }
+            else
+            {
+                mensajeAlerta = "No se pudo eliminar la reserva.";
+                esError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            mensajeAlerta = $"Error al eliminar: {ex.Message}";
+            esError = true;
+        }
+    }
+}

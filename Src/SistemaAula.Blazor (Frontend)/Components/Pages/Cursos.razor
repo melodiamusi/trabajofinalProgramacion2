@@ -1,0 +1,179 @@
+﻿@page "/cursos"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+@using SistemaAula.Blazor.Models
+@using SistemaAula.Blazor.Services
+@inject CursoApiService CursoService
+
+<h3 class="mb-4">Gestión de Cursos</h3>
+
+<div class="card p-3 mb-4 shadow-sm">
+    <h5>@(modoEdicion ? $"Editar Curso (ID: {cursoActual.Id})" : "Registrar Nuevo Curso")</h5>
+    <div class="row g-2">
+        <div class="col-md-4">
+            <label class="form-label">Nombre</label>
+            <input class="form-control" placeholder="Ej. Programación II" @bind="cursoActual.Nombre" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Profesor</label>
+            <input class="form-control" placeholder="Ej. Ing. Carlos Pérez" @bind="cursoActual.Profesor" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Horario</label>
+            <input class="form-control" placeholder="Ej. Lun/Mie 08:00 - 10:00" @bind="cursoActual.Horario" />
+        </div>
+        <div class="col-12 mt-3 text-end">
+            @if (modoEdicion)
+            {
+                <button type="button" class="btn btn-secondary me-2" @onclick="CancelarEdicion" disabled="@procesando">Cancelar</button>
+                <button type="button" class="btn btn-success" @onclick="Guardar" disabled="@procesando">
+                    @(procesando ? "Guardando..." : "Actualizar")
+                </button>
+            }
+            else
+            {
+                <button type="button" class="btn btn-primary" @onclick="Guardar" disabled="@procesando">
+                    @(procesando ? "Guardando..." : "Guardar")
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(mensajeError))
+    {
+        <div class="alert @(esExito ? "alert-success" : "alert-danger") mt-3 mb-0">@mensajeError</div>
+    }
+</div>
+
+<h5>Cursos Registrados</h5>
+@if (lista == null)
+{
+    <p><em>Cargando cursos...</em></p>
+}
+else if (lista.Count == 0)
+{
+    <div class="alert alert-warning">No hay cursos registrados.</div>
+}
+else
+{
+    <table class="table table-bordered table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Profesor</th>
+                <th>Horario</th>
+                <th style="width: 180px;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in lista)
+            {
+                <tr>
+                    <td>@c.Id</td>
+                    <td>@c.Nombre</td>
+                    <td>@c.Profesor</td>
+                    <td>@c.Horario</td>
+                    <td>
+                        <button type="button" class="btn btn-warning btn-sm me-1" @onclick="() => SeleccionarParaEditar(c)" disabled="@procesando">Editar</button>
+                        <button type="button" class="btn btn-danger btn-sm" @onclick="() => Eliminar(c.Id)" disabled="@procesando">Eliminar</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<CursoModel>? lista;
+    private CursoModel cursoActual = new();
+    private bool modoEdicion = false;
+    private bool procesando = false;
+    private bool esExito = false;
+    private string mensajeError = string.Empty;
+
+    protected override async Task OnInitializedAsync() => await Cargar();
+
+    private async Task Cargar() => lista = await CursoService.ObtenerCursosAsync();
+
+    private void SeleccionarParaEditar(CursoModel c)
+    {
+        cursoActual = new CursoModel
+        {
+            Id = c.Id,
+            Nombre = c.Nombre,
+            Profesor = c.Profesor,
+            Horario = c.Horario,
+            AulaId = c.AulaId
+        };
+        modoEdicion = true;
+        mensajeError = string.Empty;
+    }
+
+    private void CancelarEdicion()
+    {
+        cursoActual = new();
+        modoEdicion = false;
+        mensajeError = string.Empty;
+    }
+
+    private async Task Guardar()
+    {
+        mensajeError = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(cursoActual.Nombre))
+        {
+            mensajeError = "El nombre del curso es obligatorio.";
+            esExito = false;
+            return;
+        }
+
+        procesando = true;
+
+        try
+        {
+            var resultado = modoEdicion
+                ? await CursoService.ActualizarCursoAsync(cursoActual)
+                : await CursoService.CrearCursoAsync(cursoActual);
+
+            if (resultado.Exito)
+            {
+                mensajeError = resultado.Mensaje;
+                esExito = true;
+                CancelarEdicion();
+                await Cargar();
+            }
+            else
+            {
+                mensajeError = resultado.Mensaje;
+                esExito = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error de comunicación: {ex.Message}";
+            esExito = false;
+        }
+        finally
+        {
+            procesando = false;
+        }
+    }
+
+    private async Task Eliminar(int id)
+    {
+        procesando = true;
+        try
+        {
+            if (await CursoService.EliminarCursoAsync(id))
+            {
+                if (modoEdicion && cursoActual.Id == id) CancelarEdicion();
+                await Cargar();
+            }
+        }
+        finally
+        {
+            procesando = false;
+        }
+    }
+}
