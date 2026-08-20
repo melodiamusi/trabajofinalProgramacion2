@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Aplicaciones/SediAulaPro.Aplicaciones.csproj" Id="bc46ab30-aa4e-4216-bd41-09686cccf47d" />
+  <Project Path="SistemaAula.API/SediAulaPro.API.csproj" />
+  <Project Path="SistemaAula.Blazor (Frontend)/SediAulaPro.Client.csproj" Id="11c1b1bc-dfe9-46fc-8716-5c697f90d6c2" />
+  <Project Path="SistemaAula.Domain/SediAulaPro.Domain.csproj" />
+  <Project Path="SistemaAula.Infrastructure/SediAulaPro.Infrastructure.csproj" />
+</Solution>

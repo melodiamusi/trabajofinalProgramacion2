@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "SistemaAula.Domain": {
+      "commandName": "Project",
+      "workingDirectory": "C:\\Users\\migue\\Documents\\sistemapiaula\\SistemaAula\\SistemaAula.API"
+    },
+    "Perfil 1": {
+      "commandName": "Executable"
+    }
+  }
+}

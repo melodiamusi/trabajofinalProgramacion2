@@ -1,0 +1,166 @@
+﻿@page "/aulas"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+@using SistemaAula.Blazor.Models
+@using SistemaAula.Blazor.Services
+@inject AulaApiService AulaService
+
+<h3 class="mb-4">Gestión de Aulas</h3>
+
+<div class="card p-3 mb-4 shadow-sm">
+    <h5>@(modoEdicion ? "Editar Aula" : "Registrar Nueva Aula")</h5>
+    <div class="row g-2">
+        <div class="col-md-6">
+            <input class="form-control" placeholder="Nombre del Aula (ej. Laboratorio 1)" @bind="aulaActual.Nombre" />
+        </div>
+        <div class="col-md-3">
+            <input type="number" min="1" class="form-control" placeholder="Capacidad" @bind="aulaActual.Capacidad" />
+        </div>
+        <div class="col-md-3 text-end">
+            @if (modoEdicion)
+            {
+                <button type="button" class="btn btn-secondary me-1" @onclick="CancelarEdicion" disabled="@estaProcesando">Cancelar</button>
+                <button type="button" class="btn btn-success" @onclick="Guardar" disabled="@estaProcesando">
+                    @(estaProcesando ? "Guardando..." : "Actualizar")
+                </button>
+            }
+            else
+            {
+                <button type="button" class="btn btn-primary w-100" @onclick="Guardar" disabled="@estaProcesando">
+                    @(estaProcesando ? "Guardando..." : "Guardar")
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(mensajeError))
+    {
+        <div class="alert alert-danger mt-3 mb-0">@mensajeError</div>
+    }
+</div>
+
+<h5>Aulas Registradas</h5>
+@if (lista == null)
+{
+    <p><em>Cargando aulas...</em></p>
+}
+else if (lista.Count == 0)
+{
+    <div class="alert alert-warning">No hay aulas registradas.</div>
+}
+else
+{
+    <table class="table table-bordered table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Capacidad</th>
+                <th style="width: 180px;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var aula in lista)
+            {
+                <tr>
+                    <td>@aula.Id</td>
+                    <td>@aula.Nombre</td>
+                    <td>@aula.Capacidad estudiantes</td>
+                    <td>
+                        <button type="button" class="btn btn-warning btn-sm me-1" @onclick="() => SeleccionarParaEditar(aula)" disabled="@estaProcesando">Editar</button>
+                        <button type="button" class="btn btn-danger btn-sm" @onclick="() => Eliminar(aula.Id)" disabled="@estaProcesando">Eliminar</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<AulaModel>? lista;
+    private AulaModel aulaActual = new();
+    private bool modoEdicion = false;
+    private bool estaProcesando = false;
+    private string mensajeError = string.Empty;
+
+    protected override async Task OnInitializedAsync() => await Cargar();
+
+    private async Task Cargar()
+    {
+        lista = await AulaService.ObtenerAulasAsync();
+    }
+
+    private void SeleccionarParaEditar(AulaModel aula)
+    {
+        aulaActual = new AulaModel
+        {
+            Id = aula.Id,
+            Nombre = aula.Nombre,
+            Capacidad = aula.Capacidad
+        };
+        modoEdicion = true;
+        mensajeError = string.Empty;
+    }
+
+    private void CancelarEdicion()
+    {
+        aulaActual = new();
+        modoEdicion = false;
+        mensajeError = string.Empty;
+    }
+
+    private async Task Guardar()
+    {
+        mensajeError = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(aulaActual.Nombre) || aulaActual.Capacidad <= 0)
+        {
+            mensajeError = "El nombre y una capacidad mayor a 0 son obligatorios.";
+            return;
+        }
+
+        estaProcesando = true;
+
+        try
+        {
+            var resultado = modoEdicion
+                ? await AulaService.ActualizarAulaAsync(aulaActual)
+                : await AulaService.CrearAulaAsync(aulaActual);
+
+            if (resultado.Exito)
+            {
+                CancelarEdicion();
+                await Cargar();
+            }
+            else
+            {
+                mensajeError = resultado.Mensaje;
+            }
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error de comunicación: {ex.Message}";
+        }
+        finally
+        {
+            estaProcesando = false;
+        }
+    }
+
+    private async Task Eliminar(int id)
+    {
+        estaProcesando = true;
+        try
+        {
+            if (await AulaService.EliminarAulaAsync(id))
+            {
+                if (modoEdicion && aulaActual.Id == id) CancelarEdicion();
+                await Cargar();
+            }
+        }
+        finally
+        {
+            estaProcesando = false;
+        }
+    }
+}

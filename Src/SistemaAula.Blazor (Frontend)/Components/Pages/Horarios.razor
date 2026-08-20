@@ -1,0 +1,128 @@
+﻿@page "/horarios"
+@rendermode InteractiveServer
+@using SistemaAula.Blazor.Models
+@using SistemaAula.Blazor.Services
+@inject HorarioApiService HorarioService
+
+<PageTitle>Horarios - SediAula PRO</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-0">⏰ Bloques de Horarios</h3>
+        <small class="text-muted">Definición de turnos académicos y franjas de disponibilidad</small>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Formulario de Horario -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+            <h5 class="fw-bold text-primary mb-3">Registrar Franja Horaria</h5>
+            <EditForm Model="nuevoHorario" OnValidSubmit="GuardarHorario">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Día de la Semana</label>
+                    <select class="form-select" @bind="nuevoHorario.DiaSemana">
+                        <option value="Lunes">Lunes</option>
+                        <option value="Martes">Martes</option>
+                        <option value="Miércoles">Miércoles</option>
+                        <option value="Jueves">Jueves</option>
+                        <option value="Viernes">Viernes</option>
+                        <option value="Sábado">Sábado</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Hora de Inicio</label>
+                    <input type="time" class="form-control" value="@nuevoHorario.HoraInicio.ToString(@"hh\:mm")"
+                           @onchange="@((ChangeEventArgs e) => nuevoHorario.HoraInicio = TimeSpan.Parse(e.Value?.ToString() ?? "08:00"))" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Hora de Finalización</label>
+                    <input type="time" class="form-control" value="@nuevoHorario.HoraFin.ToString(@"hh\:mm")"
+                           @onchange="@((ChangeEventArgs e) => nuevoHorario.HoraFin = TimeSpan.Parse(e.Value?.ToString() ?? "10:00"))" />
+                </div>
+                <button type="submit" class="btn btn-primary w-100 rounded-3 fw-semibold">
+                    Guardar Franja Horaria
+                </button>
+            </EditForm>
+        </div>
+    </div>
+
+    <!-- Listado de Horarios -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+            <h5 class="fw-bold text-dark mb-3">Horarios Configurados</h5>
+
+            @if (cargando)
+            {
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            }
+            else if (horarios.Count == 0)
+            {
+                <div class="alert alert-light border text-center py-3">No hay horarios configurados.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Día</th>
+                                <th>Franja Horaria</th>
+                                <th>Duración</th>
+                                <th class="text-end">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var h in horarios)
+                            {
+                                <tr>
+                                    <td><span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2 rounded-pill fw-semibold">@h.DiaSemana</span></td>
+                                    <td class="fw-bold text-dark">@h.HoraInicio.ToString(@"hh\:mm") - @h.HoraFin.ToString(@"hh\:mm")</td>
+                                    <td><small class="text-muted">@((h.HoraFin - h.HoraInicio).TotalHours) hrs</small></td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-danger rounded-pill px-3" @onclick="() => Eliminar(h.Id)">
+                                            Eliminar
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<HorarioModel> horarios = new();
+    private HorarioModel nuevoHorario = new();
+    private bool cargando = true;
+
+    protected override async Task OnInitializedAsync() => await CargarHorarios();
+
+    private async Task CargarHorarios()
+    {
+        cargando = true;
+        horarios = await HorarioService.ObtenerHorariosAsync();
+        cargando = false;
+    }
+
+    private async Task GuardarHorario()
+    {
+        var ok = await HorarioService.CrearHorarioAsync(nuevoHorario);
+        if (ok)
+        {
+            nuevoHorario = new();
+            await CargarHorarios();
+        }
+    }
+
+    private async Task Eliminar(int id)
+    {
+        var ok = await HorarioService.EliminarHorarioAsync(id);
+        if (ok) await CargarHorarios();
+    }
+}
